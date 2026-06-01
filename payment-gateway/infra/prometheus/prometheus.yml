@@ -1,0 +1,88 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+  external_labels:
+    environment: "${ENVIRONMENT:-development}"
+
+scrape_configs:
+  - job_name: traefik
+    static_configs:
+      - targets: ["traefik:8080"]
+
+  - job_name: payment-service
+    static_configs:
+      - targets: ["payment-service:8010"]
+    metrics_path: /metrics
+
+  - job_name: card-vault-service
+    static_configs:
+      - targets: ["card-vault-service:8011"]
+    metrics_path: /metrics
+
+  - job_name: merchant-service
+    static_configs:
+      - targets: ["merchant-service:8012"]
+    metrics_path: /metrics
+
+  - job_name: fraud-service
+    static_configs:
+      - targets: ["fraud-service:8013"]
+    metrics_path: /metrics
+
+  - job_name: upi-service
+    static_configs:
+      - targets: ["upi-service:8014"]
+    metrics_path: /metrics
+
+  - job_name: settlement-service
+    static_configs:
+      - targets: ["settlement-service:8015"]
+    metrics_path: /metrics
+
+  - job_name: refund-service
+    static_configs:
+      - targets: ["refund-service:8016"]
+    metrics_path: /metrics
+
+  - job_name: notification-service
+    static_configs:
+      - targets: ["notification-service:8017"]
+    metrics_path: /metrics
+
+  - job_name: kyc-service
+    static_configs:
+      - targets: ["kyc-service:8018"]
+    metrics_path: /metrics
+
+  - job_name: netbanking-service
+    static_configs:
+      - targets: ["netbanking-service:8019"]
+    metrics_path: /metrics
+
+  - job_name: transaction-service
+    static_configs:
+      - targets: ["transaction-service:8020"]
+    metrics_path: /metrics
+
+  - job_name: webhook-service
+    static_configs:
+      - targets: ["webhook-service:8021"]
+    metrics_path: /metrics
+
+  - job_name: reporting-service
+    static_configs:
+      - targets: ["reporting-service:8022"]
+    metrics_path: /metrics
+
+  - job_name: audit-service
+    static_configs:
+      - targets: ["audit-service:8024"]
+    metrics_path: /metrics
+
+  - job_name: postgres-exporter
+    static_configs:
+      - targets: ["postgres-exporter:9187"]
+
+  - job_name: redis-exporter
+    static_configs:
+      - targets: ["redis-exporter:9121"]

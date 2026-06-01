@@ -1,0 +1,46 @@
+http:
+  middlewares:
+    payment-ratelimit:
+      rateLimit:
+        average: 100
+        burst: 50
+        period: 1m
+        sourceCriterion:
+          ipStrategy:
+            depth: 1
+
+    merchant-ratelimit:
+      rateLimit:
+        average: 60
+        burst: 30
+        period: 1m
+
+    reports-ratelimit:
+      rateLimit:
+        average: 20
+        burst: 10
+        period: 1m
+
+    secure-headers:
+      headers:
+        stsSeconds: 31536000
+        stsIncludeSubdomains: true
+        stsPreload: true
+        forceSTSHeader: true
+        frameDeny: true
+        contentTypeNosniff: true
+        browserXssFilter: true
+        referrerPolicy: "strict-origin-when-cross-origin"
+        permissionsPolicy: "camera=(), microphone=(), geolocation=()"
+        customResponseHeaders:
+          X-Content-Type-Options: "nosniff"
+          X-Frame-Options: "DENY"
+          X-XSS-Protection: "1; mode=block"
+
+    compress:
+      compress: {}
+
+    # dashboard-auth:
+    #   basicAuth:
+    #     users:
+    #       - "admin:$apr1$CHANGE_ME"

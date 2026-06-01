@@ -1,0 +1,487 @@
+version: "3.9"
+
+networks:
+  payment_network:
+    driver: bridge
+  cde_network:
+    driver: bridge
+    internal: true
+
+volumes:
+  postgres_main_data:
+  postgres_vault_data:
+  redis_data:
+  redpanda_data:
+  keycloak_data:
+  traefik_letsencrypt:
+  grafana_data:
+  prometheus_data:
+  infisical_data:
+
+x-service-defaults: &service-defaults
+  restart: unless-stopped
+  env_file: .env
+  networks:
+    - payment_network
+
+# ─── Infrastructure ──────────────────────────────────────────────────────────
+
+services:
+  traefik:
+    image: traefik:v3.0
+    <<: *service-defaults
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ./infra/traefik/traefik.yml:/etc/traefik/traefik.yml:ro
+      - ./infra/traefik/dynamic:/etc/traefik/dynamic:ro
+      - traefik_letsencrypt:/letsencrypt
+
+  postgres-main:
+    image: postgres:16-alpine
+    <<: *service-defaults
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-pguser}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-pgpass}
+      POSTGRES_DB: ${POSTGRES_DB:-payment_db}
+    volumes:
+      - postgres_main_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-pguser}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  postgres-vault:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    env_file: .env
+    networks:
+      - cde_network
+    environment:
+      POSTGRES_USER: ${VAULT_POSTGRES_USER:-vault_user}
+      POSTGRES_PASSWORD: ${VAULT_POSTGRES_PASSWORD:-vault_pass}
+      POSTGRES_DB: ${VAULT_POSTGRES_DB:-vault_db}
+    volumes:
+      - postgres_vault_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${VAULT_POSTGRES_USER:-vault_user}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  postgres-exporter:
+    image: prometheuscommunity/postgres-exporter:latest
+    <<: *service-defaults
+    environment:
+      DATA_SOURCE_NAME: "postgresql://${POSTGRES_USER:-pguser}:${POSTGRES_PASSWORD:-pgpass}@postgres-main:5432/${POSTGRES_DB:-payment_db}?sslmode=disable"
+    depends_on:
+      postgres-main:
+        condition: service_healthy
+
+  redis:
+    image: redis:7-alpine
+    <<: *service-defaults
+    volumes:
+      - redis_data:/data
+    command: ["redis-server", "--appendonly", "yes", "--maxmemory", "512mb", "--maxmemory-policy", "allkeys-lru"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis-exporter:
+    image: oliver006/redis_exporter:latest
+    <<: *service-defaults
+    environment:
+      REDIS_ADDR: redis://redis:6379
+    depends_on:
+      redis:
+        condition: service_healthy
+
+  redpanda:
+    image: redpandadata/redpanda:latest
+    <<: *service-defaults
+    volumes:
+      - redpanda_data:/var/lib/redpanda/data
+    command:
+      - redpanda
+      - start
+      - --mode=dev-container
+      - --smp=1
+      - --memory=512M
+      - --reserve-memory=0M
+      - --node-id=0
+      - --kafka-addr=internal://0.0.0.0:9092,external://0.0.0.0:19092
+      - --advertise-kafka-addr=internal://redpanda:9092,external://localhost:19092
+    healthcheck:
+      test: ["CMD-SHELL", "rpk cluster health | grep -E 'Healthy:.+true'"]
+      interval: 15s
+      timeout: 10s
+      retries: 10
+
+  redpanda-init:
+    image: redpandadata/redpanda:latest
+    networks:
+      - payment_network
+    depends_on:
+      redpanda:
+        condition: service_healthy
+    entrypoint: ["/bin/bash", "-c"]
+    command:
+      - |
+        rpk topic create payment.initiated payment.authorized payment.captured payment.failed payment.cancelled \
+          refund.initiated refund.processing refund.completed refund.failed \
+          upi.collect_initiated upi.callback_received upi.status_updated \
+          merchant.registered merchant.kyc_doc_uploaded merchant.kyc_completed merchant.kyc_rejected \
+          settlement.batch_created settlement.payout_initiated settlement.completed settlement.failed \
+          audit.events dlq.payment_events dlq.merchant_events \
+          --brokers redpanda:9092 --replicas 1
+    restart: "no"
+
+  keycloak:
+    image: quay.io/keycloak/keycloak:24.0
+    <<: *service-defaults
+    environment:
+      KEYCLOAK_ADMIN: ${KEYCLOAK_ADMIN:-admin}
+      KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD:-admin}
+      KC_DB: dev-mem
+      KC_HTTP_RELATIVE_PATH: /auth
+    command: start-dev
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.keycloak.rule=Host(`auth.${DOMAIN:-localhost}`)"
+      - "traefik.http.routers.keycloak.entrypoints=websecure"
+      - "traefik.http.services.keycloak.loadbalancer.server.port=8080"
+    depends_on:
+      postgres-main:
+        condition: service_healthy
+
+  prometheus:
+    image: prom/prometheus:latest
+    <<: *service-defaults
+    volumes:
+      - ./infra/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --storage.tsdb.retention.time=30d
+
+  grafana:
+    image: grafana/grafana:latest
+    <<: *service-defaults
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-admin}
+      GF_SERVER_ROOT_URL: "https://monitor.${DOMAIN:-localhost}"
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./infra/grafana/dashboards:/var/lib/grafana/dashboards
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.grafana.rule=Host(`monitor.${DOMAIN:-localhost}`)"
+      - "traefik.http.routers.grafana.entrypoints=websecure"
+      - "traefik.http.services.grafana.loadbalancer.server.port=3000"
+    depends_on:
+      - prometheus
+
+# ─── FastAPI Services ─────────────────────────────────────────────────────────
+
+  payment-service:
+    build: ./services/payment-service
+    <<: *service-defaults
+    ports:
+      - "8010:8010"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8010/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.payment.rule=Host(`api.${DOMAIN:-localhost}`) && PathPrefix(`/v1/payments`)"
+      - "traefik.http.routers.payment.entrypoints=websecure"
+      - "traefik.http.routers.payment.middlewares=payment-ratelimit,secure-headers,compress"
+      - "traefik.http.services.payment.loadbalancer.server.port=8010"
+    depends_on:
+      postgres-main:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      redpanda:
+        condition: service_healthy
+
+  card-vault-service:
+    build: ./services/card-vault-service
+    restart: unless-stopped
+    env_file: .env
+    networks:
+      - cde_network
+    ports:
+      - "8011:8011"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8011/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    depends_on:
+      postgres-vault:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  merchant-service:
+    build: ./services/merchant-service
+    <<: *service-defaults
+    ports:
+      - "8012:8012"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8012/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.merchant.rule=Host(`api.${DOMAIN:-localhost}`) && PathPrefix(`/v1/merchants`)"
+      - "traefik.http.routers.merchant.entrypoints=websecure"
+      - "traefik.http.routers.merchant.middlewares=merchant-ratelimit,secure-headers,compress"
+      - "traefik.http.services.merchant.loadbalancer.server.port=8012"
+    depends_on:
+      postgres-main:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      redpanda:
+        condition: service_healthy
+
+  fraud-service:
+    build: ./services/fraud-service
+    <<: *service-defaults
+    ports:
+      - "8013:8013"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8013/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    depends_on:
+      redis:
+        condition: service_healthy
+
+  upi-service:
+    build: ./services/upi-service
+    <<: *service-defaults
+    ports:
+      - "8014:8014"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8014/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.upi.rule=Host(`api.${DOMAIN:-localhost}`) && PathPrefix(`/v1/upi`)"
+      - "traefik.http.routers.upi.entrypoints=websecure"
+      - "traefik.http.services.upi.loadbalancer.server.port=8014"
+    depends_on:
+      postgres-main:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  settlement-service:
+    build: ./services/settlement-service
+    <<: *service-defaults
+    ports:
+      - "8015:8015"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8015/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.settlement.rule=Host(`api.${DOMAIN:-localhost}`) && PathPrefix(`/v1/settlements`)"
+      - "traefik.http.routers.settlement.entrypoints=websecure"
+      - "traefik.http.services.settlement.loadbalancer.server.port=8015"
+    depends_on:
+      postgres-main:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  refund-service:
+    build: ./services/refund-service
+    <<: *service-defaults
+    ports:
+      - "8016:8016"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8016/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.refund.rule=Host(`api.${DOMAIN:-localhost}`) && PathPrefix(`/v1/refunds`)"
+      - "traefik.http.routers.refund.entrypoints=websecure"
+      - "traefik.http.services.refund.loadbalancer.server.port=8016"
+    depends_on:
+      postgres-main:
+        condition: service_healthy
+
+  notification-service:
+    build: ./services/notification-service
+    <<: *service-defaults
+    ports:
+      - "8017:8017"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8017/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    depends_on:
+      redis:
+        condition: service_healthy
+      redpanda:
+        condition: service_healthy
+
+  kyc-service:
+    build: ./services/kyc-service
+    <<: *service-defaults
+    ports:
+      - "8018:8018"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8018/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    depends_on:
+      postgres-main:
+        condition: service_healthy
+
+  netbanking-service:
+    build: ./services/netbanking-service
+    <<: *service-defaults
+    ports:
+      - "8019:8019"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8019/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    depends_on:
+      postgres-main:
+        condition: service_healthy
+
+  transaction-service:
+    build: ./services/transaction-service
+    <<: *service-defaults
+    ports:
+      - "8020:8020"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8020/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    depends_on:
+      postgres-main:
+        condition: service_healthy
+
+  webhook-service:
+    build: ./services/webhook-service
+    <<: *service-defaults
+    ports:
+      - "8021:8021"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8021/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    depends_on:
+      redis:
+        condition: service_healthy
+      redpanda:
+        condition: service_healthy
+
+  reporting-service:
+    build: ./services/reporting-service
+    <<: *service-defaults
+    ports:
+      - "8022:8022"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8022/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.reporting.rule=Host(`api.${DOMAIN:-localhost}`) && PathPrefix(`/v1/reports`)"
+      - "traefik.http.routers.reporting.entrypoints=websecure"
+      - "traefik.http.routers.reporting.middlewares=reports-ratelimit,secure-headers"
+      - "traefik.http.services.reporting.loadbalancer.server.port=8022"
+    depends_on:
+      postgres-main:
+        condition: service_healthy
+
+  audit-service:
+    build: ./services/audit-service
+    <<: *service-defaults
+    ports:
+      - "8024:8024"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8024/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    depends_on:
+      postgres-main:
+        condition: service_healthy
+      redpanda:
+        condition: service_healthy
+
+# ─── Celery Workers ───────────────────────────────────────────────────────────
+
+  celery-worker-settlement:
+    build: ./services/settlement-service
+    <<: *service-defaults
+    command: celery -A tasks worker -Q settlement -c 2 --loglevel=info
+    depends_on:
+      redis:
+        condition: service_healthy
+      postgres-main:
+        condition: service_healthy
+
+  celery-worker-notification:
+    build: ./services/notification-service
+    <<: *service-defaults
+    command: celery -A tasks worker -Q notification -c 4 --loglevel=info
+    depends_on:
+      redis:
+        condition: service_healthy
+
+  celery-beat:
+    build: ./services/settlement-service
+    <<: *service-defaults
+    command: celery -A tasks beat --scheduler celery.beat:PersistentScheduler --loglevel=info
+    volumes:
+      - /tmp/celerybeat-schedule:/tmp/celerybeat-schedule
+    depends_on:
+      redis:
+        condition: service_healthy
