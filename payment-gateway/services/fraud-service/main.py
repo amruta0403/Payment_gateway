@@ -76,6 +76,28 @@ async def lifespan(app: FastAPI):
         log.warning("kafka.producer.start_failed", error=str(exc))
         app.state.kafka_producer = None
 
+    # ── Fraud-specific state ───────────────────────────────────────────────
+    from rules.engine import RulesEngine, ALL_RULE_NAMES
+    from model.scorer import FraudMLScorer
+
+    app.state.rules_engine = RulesEngine(redis=redis)
+    app.state.ml_scorer = FraudMLScorer()
+    app.state.settings = settings
+
+    # Seed fraud_rules table (upsert by rule_name)
+    try:
+        from models.fraud import FraudRule
+        from sqlalchemy.dialects.postgresql import insert as pg_insert
+        async with app.state.session_factory() as seed_db:
+            for rule_def in ALL_RULE_NAMES:
+                stmt = pg_insert(FraudRule).values(**rule_def).on_conflict_do_nothing(
+                    index_elements=["rule_name"]
+                )
+                await seed_db.execute(stmt)
+            await seed_db.commit()
+    except Exception as exc:
+        log.warning("fraud_rules.seed.failed", error=str(exc))
+
     log.info("service.ready", service="fraud-service")
     yield
 

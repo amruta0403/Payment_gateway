@@ -76,6 +76,35 @@ async def lifespan(app: FastAPI):
         log.warning("kafka.producer.start_failed", error=str(exc))
         app.state.kafka_producer = None
 
+    # ── Encryption ────────────────────────────────────────────────────────────
+    from shared.utils.encryption import FieldEncryptor
+    enc_key = settings.CARD_ENCRYPTION_KEY_V1
+    if not enc_key:
+        enc_key = FieldEncryptor.generate_key_b64()
+        log.warning("encryption.dev_key", warning="ephemeral key — INSECURE for production")
+    encryptor = FieldEncryptor(enc_key)
+    app.state.encryptor = encryptor
+    app.state.settings = settings
+
+    # ── NPCI client ───────────────────────────────────────────────────────────
+    from adapters.mock_npci import MockNpciClient
+    npci_client = MockNpciClient(
+        session_factory=app.state.session_factory,
+        kafka_producer=app.state.kafka_producer,
+        resolution_delay=5.0,
+    )
+
+    # ── UpiService ────────────────────────────────────────────────────────────
+    from services.upi_service import UpiService
+    app.state.upi_service = UpiService(
+        npci_client=npci_client,
+        session_factory=app.state.session_factory,
+        redis=redis,
+        kafka_producer=app.state.kafka_producer,
+        encryptor=encryptor,
+        gateway_vpa=settings.GATEWAY_VPA,
+    )
+
     log.info("service.ready", service="upi-service")
     yield
 
@@ -110,6 +139,10 @@ Instrumentator().instrument(app).expose(app, endpoint="/metrics")
 from routers import __all__ as router_modules  # noqa: E402  (populated by each service)
 for router in router_modules:
     app.include_router(router, prefix="/v1")
+
+# NPCI callback — no /v1 prefix (NPCI posts directly to /upi/callback)
+from routers.upi import callback_router as _cb_router  # noqa: E402
+app.include_router(_cb_router)
 
 
 @app.get("/health", tags=["ops"])

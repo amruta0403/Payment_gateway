@@ -35,3 +35,10 @@ class Settings(BaseSettings):
 
     CELERY_BROKER_URL: str = "redis://redis:6379/1"
     CELERY_RESULT_BACKEND: str = "redis://redis:6379/2"
+
+    # Settlement-specific
+    PAYOUT_PROVIDER: str = "mock"        # "mock" | "razorpay"
+    RAZORPAY_KEY_ID: str = ""
+    RAZORPAY_KEY_SECRET: str = ""
+    RAZORPAY_X_ACCOUNT: str = ""         # Razorpay X source account number
+    SETTLEMENT_CUTOFF_HOUR_UTC: int = 17  # 17:30 UTC = 23:00 IST

@@ -76,6 +76,29 @@ async def lifespan(app: FastAPI):
         log.warning("kafka.producer.start_failed", error=str(exc))
         app.state.kafka_producer = None
 
+    from shared.utils.encryption import FieldEncryptor
+    enc_key = settings.CARD_ENCRYPTION_KEY_V1
+    if not enc_key:
+        enc_key = FieldEncryptor.generate_key_b64()
+        log.warning("encryption.dev_key", warning="ephemeral key — INSECURE for production")
+    app.state.encryptor = FieldEncryptor(enc_key)
+    app.state.settings = settings
+
+    try:
+        import boto3
+        if settings.AWS_ACCESS_KEY_ID and settings.AWS_SECRET_ACCESS_KEY:
+            app.state.s3_client = boto3.client(
+                "s3",
+                region_name=settings.AWS_REGION,
+                aws_access_key_id=settings.AWS_ACCESS_KEY_ID,
+                aws_secret_access_key=settings.AWS_SECRET_ACCESS_KEY,
+                endpoint_url=settings.S3_ENDPOINT_URL or None,
+            )
+        else:
+            app.state.s3_client = None
+    except ImportError:
+        app.state.s3_client = None
+
     log.info("service.ready", service="merchant-service")
     yield
 

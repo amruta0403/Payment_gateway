@@ -1,1 +1,3 @@
-﻿__all__ = []  # routers registered here
+﻿from routers.fraud import router as fraud_router
+
+__all__ = [fraud_router]

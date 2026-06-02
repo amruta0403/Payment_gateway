@@ -35,3 +35,9 @@ class Settings(BaseSettings):
 
     CELERY_BROKER_URL: str = "redis://redis:6379/1"
     CELERY_RESULT_BACKEND: str = "redis://redis:6379/2"
+
+    # UPI-specific
+    NPCI_CLIENT_MODE: str = "mock"           # "mock" | "live"
+    NPCI_CALLBACK_SECRET: str = "change-me"  # HMAC key for callback validation
+    GATEWAY_VPA: str = "merchant@hdfc"       # Default payee VPA
+    UPI_COLLECT_EXPIRY_SECONDS: int = 300

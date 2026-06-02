@@ -138,7 +138,6 @@ async def create_merchant(
         business_type=request.business_type,
         status=MerchantStatus.DRAFT,
         website_url=str(request.website_url) if request.website_url else None,
-        support_phone=phone_enc,
         business_category=request.business_category,
         fee_config=dict(DEFAULT_FEE_CONFIG),
     )
