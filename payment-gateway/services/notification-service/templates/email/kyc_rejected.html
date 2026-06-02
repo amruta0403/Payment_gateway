@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0"><title>KYC Update</title></head>
+<body style="margin:0;padding:0;background:#f4f4f5;font-family:Arial,Helvetica,sans-serif;">
+<table width="100%" cellpadding="0" cellspacing="0" style="background:#f4f4f5;padding:32px 0;">
+  <tr><td align="center">
+    <table width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;background:#ffffff;border-radius:8px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,.08);">
+      <tr><td style="background:#d97706;padding:28px 40px;text-align:center;">
+        <div style="font-size:32px;margin-bottom:8px;">⚠️</div>
+        <h1 style="margin:0;color:#ffffff;font-size:22px;font-weight:700;">KYC Verification Update</h1>
+      </td></tr>
+      <tr><td style="padding:40px 40px 32px;">
+        <p style="margin:0 0 20px;color:#374151;font-size:15px;line-height:1.6;">
+          We were unable to verify your KYC documents. Please re-submit the required documents to activate your account.
+        </p>
+        {% if rejection_reason %}
+        <div style="background:#fffbeb;border:1px solid #fde68a;border-radius:6px;padding:16px 20px;margin-bottom:24px;">
+          <div style="color:#92400e;font-size:13px;font-weight:600;margin-bottom:6px;">Reason:</div>
+          <div style="color:#78350f;font-size:14px;">{{ rejection_reason }}</div>
+        </div>
+        {% endif %}
+        <p style="margin:0 0 24px;color:#374151;font-size:15px;line-height:1.6;">
+          Common reasons for rejection:
+        </p>
+        <ul style="margin:0 0 24px;padding:0 0 0 20px;color:#6b7280;font-size:14px;line-height:2;">
+          <li>Document is blurry or partially cut off</li>
+          <li>Expired document</li>
+          <li>Name mismatch between documents</li>
+          <li>Incorrect document type uploaded</li>
+        </ul>
+        <p style="margin:0;color:#374151;font-size:14px;line-height:1.6;">
+          Log in to your merchant dashboard and re-upload clear, valid documents.
+        </p>
+      </td></tr>
+      <tr><td style="padding:20px 40px 32px;border-top:1px solid #f3f4f6;text-align:center;color:#9ca3af;font-size:12px;">
+        Support: <a href="mailto:{{ support_email }}" style="color:#d97706;">{{ support_email }}</a>
+      </td></tr>
+    </table>
+  </td></tr>
+</table>
+</body></html>

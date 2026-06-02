@@ -1,1 +1,3 @@
-﻿__all__ = []  # routers registered here
+from routers.notification import router as notification_router
+
+__all__ = [notification_router]

@@ -1,1 +1,3 @@
-﻿__all__ = []  # routers registered here
+from routers.audit import router as audit_router
+
+__all__ = [audit_router]

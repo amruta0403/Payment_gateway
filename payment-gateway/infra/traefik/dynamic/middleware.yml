@@ -1,5 +1,13 @@
 http:
   middlewares:
+
+    # ── HTTPS redirect ──────────────────────────────────────────────────────
+    https-redirect:
+      redirectScheme:
+        scheme: https
+        permanent: true
+
+    # ── Rate limiting ───────────────────────────────────────────────────────
     payment-ratelimit:
       rateLimit:
         average: 100
@@ -7,40 +15,82 @@ http:
         period: 1m
         sourceCriterion:
           ipStrategy:
-            depth: 1
+            depth: 1         # use X-Forwarded-For[0] behind proxy
 
     merchant-ratelimit:
       rateLimit:
         average: 60
         burst: 30
         period: 1m
+        sourceCriterion:
+          ipStrategy:
+            depth: 1
 
     reports-ratelimit:
       rateLimit:
         average: 20
         burst: 10
         period: 1m
+        sourceCriterion:
+          ipStrategy:
+            depth: 1
 
+    # ── Security headers ────────────────────────────────────────────────────
     secure-headers:
       headers:
+        # HSTS — tell browsers to always use HTTPS for 1 year
         stsSeconds: 31536000
         stsIncludeSubdomains: true
         stsPreload: true
         forceSTSHeader: true
+        # Clickjacking protection
         frameDeny: true
+        customResponseHeaders:
+          X-Frame-Options: "DENY"
+        # MIME sniffing protection
         contentTypeNosniff: true
+        customRequestHeaders:
+          X-Content-Type-Options: "nosniff"
+        # XSS filter (legacy browsers)
         browserXssFilter: true
+        # Referrer policy
         referrerPolicy: "strict-origin-when-cross-origin"
-        permissionsPolicy: "camera=(), microphone=(), geolocation=()"
+        # Feature policy
+        permissionsPolicy: "camera=(), microphone=(), geolocation=(), payment=(self)"
+        # Remove server header
         customResponseHeaders:
           X-Content-Type-Options: "nosniff"
           X-Frame-Options: "DENY"
           X-XSS-Protection: "1; mode=block"
+          Server: ""
 
+    # ── Compression ─────────────────────────────────────────────────────────
     compress:
-      compress: {}
+      compress:
+        excludedContentTypes:
+          - text/event-stream
 
-    # dashboard-auth:
-    #   basicAuth:
-    #     users:
-    #       - "admin:$apr1$CHANGE_ME"
+    # ── Dashboard basic-auth ─────────────────────────────────────────────────
+    # Generate password hash: htpasswd -nb admin yourpassword
+    # Then base64 encode and set TRAEFIK_DASHBOARD_USERS in .env
+    dashboard-auth:
+      basicAuth:
+        users:
+          - "${TRAEFIK_DASHBOARD_USERS:-admin:$apr1$changeme$REPLACE_WITH_HASHED_PASSWORD}"
+        realm: "Traefik Dashboard"
+        removeHeader: true
+
+    # ── IP whitelist for internal admin endpoints ────────────────────────────
+    internal-only:
+      ipAllowList:
+        sourceRange:
+          - "127.0.0.1/32"
+          - "172.20.0.0/16"    # payment_network subnet
+          - "10.0.0.0/8"       # RFC-1918 private
+
+    # ── Request size limit ───────────────────────────────────────────────────
+    # Prevent unbounded uploads (KYC documents go via pre-signed S3 URL)
+    request-size-limit:
+      buffering:
+        maxRequestBodyBytes: 10485760    # 10 MB hard limit
+        memRequestBodyBytes: 2097152     # buffer 2 MB in memory
