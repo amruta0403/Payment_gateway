@@ -1,0 +1,51 @@
+{
+  "uid": "fastapi-services",
+  "title": "FastAPI Services — All 14",
+  "tags": ["fastapi", "services"],
+  "refresh": "30s",
+  "time": {"from": "now-1h", "to": "now"},
+  "schemaVersion": 38,
+  "templating": {
+    "list": [{
+      "name": "service", "type": "query", "label": "Service",
+      "datasource": "Prometheus",
+      "query": "label_values(http_requests_total, job)",
+      "multi": true, "includeAll": true, "current": {"text": "All", "value": "$__all"}
+    }]
+  },
+  "panels": [
+    {
+      "id": 1, "type": "table", "title": "Service Health Overview",
+      "gridPos": {"h": 8, "w": 24, "x": 0, "y": 0},
+      "options": {"sortBy": [{"displayName": "Error Rate", "desc": true}]},
+      "targets": [
+        {"datasource": "Prometheus", "expr": "sum(rate(http_requests_total{job=~\"$service\"}[5m])) by (job)", "legendFormat": "{{job}}", "instant": true},
+        {"datasource": "Prometheus", "expr": "sum(rate(http_requests_total{job=~\"$service\", status=~\"[45]..\"}[5m])) by (job) / sum(rate(http_requests_total{job=~\"$service\"}[5m])) by (job)", "legendFormat": "{{job}}", "instant": true}
+      ]
+    },
+    {
+      "id": 2, "type": "timeseries", "title": "Request Rate (req/s)",
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 8},
+      "fieldConfig": {"defaults": {"unit": "reqps"}},
+      "targets": [{"datasource": "Prometheus", "expr": "sum(rate(http_requests_total{job=~\"$service\"}[5m])) by (job)", "legendFormat": "{{job}}"}]
+    },
+    {
+      "id": 3, "type": "timeseries", "title": "p95 Response Latency",
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 8},
+      "fieldConfig": {"defaults": {"unit": "s"}},
+      "targets": [{"datasource": "Prometheus", "expr": "histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket{job=~\"$service\"}[5m])) by (le, job))", "legendFormat": "p95 {{job}}"}]
+    },
+    {
+      "id": 4, "type": "timeseries", "title": "4xx Client Errors",
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 16},
+      "fieldConfig": {"defaults": {"unit": "reqps"}},
+      "targets": [{"datasource": "Prometheus", "expr": "sum(rate(http_requests_total{job=~\"$service\", status=~\"4..\"}[5m])) by (job, status)", "legendFormat": "{{job}} {{status}}"}]
+    },
+    {
+      "id": 5, "type": "timeseries", "title": "5xx Server Errors",
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 16},
+      "fieldConfig": {"defaults": {"unit": "reqps"}},
+      "targets": [{"datasource": "Prometheus", "expr": "sum(rate(http_requests_total{job=~\"$service\", status=~\"5..\"}[5m])) by (job, status)", "legendFormat": "{{job}} {{status}}"}]
+    }
+  ]
+}

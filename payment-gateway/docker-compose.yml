@@ -340,6 +340,8 @@ services:
       GF_INSTALL_PLUGINS: grafana-clock-panel,grafana-piechart-panel
     volumes:
       - grafana_data:/var/lib/grafana
+      - ./infra/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./infra/grafana/dashboards:/var/lib/grafana/dashboards:ro
     labels:
       - "traefik.enable=true"
       - "traefik.docker.network=payment_network"
@@ -428,8 +430,8 @@ services:
   # ── Payment Service (8010) ────────────────────────────────────────────────
   payment-service:
     build:
-      context: ./services/payment-service
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: services/payment-service/Dockerfile
     <<: *service-defaults
     expose: ["8010"]
     healthcheck:
@@ -460,8 +462,8 @@ services:
   # ── Card Vault Service (8011) — CDE, no public route ─────────────────────
   card-vault-service:
     build:
-      context: ./services/card-vault-service
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: services/card-vault-service/Dockerfile
     restart: unless-stopped
     env_file: .env
     networks:
@@ -481,8 +483,8 @@ services:
   # ── Merchant Service (8012) ───────────────────────────────────────────────
   merchant-service:
     build:
-      context: ./services/merchant-service
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: services/merchant-service/Dockerfile
     <<: *service-defaults
     expose: ["8012"]
     healthcheck:
@@ -513,8 +515,8 @@ services:
   # ── Fraud Service (8013) — internal only ──────────────────────────────────
   fraud-service:
     build:
-      context: ./services/fraud-service
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: services/fraud-service/Dockerfile
     <<: *service-defaults
     expose: ["8013"]
     healthcheck:
@@ -530,8 +532,8 @@ services:
   # ── UPI Service (8014) ────────────────────────────────────────────────────
   upi-service:
     build:
-      context: ./services/upi-service
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: services/upi-service/Dockerfile
     <<: *service-defaults
     expose: ["8014"]
     healthcheck:
@@ -561,8 +563,8 @@ services:
   # ── Settlement Service (8015) ─────────────────────────────────────────────
   settlement-service:
     build:
-      context: ./services/settlement-service
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: services/settlement-service/Dockerfile
     <<: *service-defaults
     expose: ["8015"]
     healthcheck:
@@ -591,8 +593,8 @@ services:
   # ── Refund Service (8016) ─────────────────────────────────────────────────
   refund-service:
     build:
-      context: ./services/refund-service
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: services/refund-service/Dockerfile
     <<: *service-defaults
     expose: ["8016"]
     healthcheck:
@@ -621,8 +623,8 @@ services:
   # ── Notification Service (8017) — internal consumer ──────────────────────
   notification-service:
     build:
-      context: ./services/notification-service
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: services/notification-service/Dockerfile
     <<: *service-defaults
     expose: ["8017"]
     healthcheck:
@@ -638,8 +640,8 @@ services:
   # ── KYC Service (8018) ────────────────────────────────────────────────────
   kyc-service:
     build:
-      context: ./services/kyc-service
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: services/kyc-service/Dockerfile
     <<: *service-defaults
     expose: ["8018"]
     healthcheck:
@@ -666,8 +668,8 @@ services:
   # ── Netbanking Service (8019) ─────────────────────────────────────────────
   netbanking-service:
     build:
-      context: ./services/netbanking-service
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: services/netbanking-service/Dockerfile
     <<: *service-defaults
     expose: ["8019"]
     healthcheck:
@@ -694,8 +696,8 @@ services:
   # ── Transaction Service (8020) ────────────────────────────────────────────
   transaction-service:
     build:
-      context: ./services/transaction-service
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: services/transaction-service/Dockerfile
     <<: *service-defaults
     expose: ["8020"]
     healthcheck:
@@ -722,8 +724,8 @@ services:
   # ── Webhook Service (8021) ────────────────────────────────────────────────
   webhook-service:
     build:
-      context: ./services/webhook-service
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: services/webhook-service/Dockerfile
     <<: *service-defaults
     expose: ["8021"]
     healthcheck:
@@ -750,8 +752,8 @@ services:
   # ── Reporting Service (8022) ──────────────────────────────────────────────
   reporting-service:
     build:
-      context: ./services/reporting-service
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: services/reporting-service/Dockerfile
     <<: *service-defaults
     expose: ["8022"]
     healthcheck:
@@ -778,8 +780,8 @@ services:
   # ── Audit Service (8024) — internal, append-only ──────────────────────────
   audit-service:
     build:
-      context: ./services/audit-service
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: services/audit-service/Dockerfile
     <<: *service-defaults
     expose: ["8024"]
     healthcheck:
@@ -798,8 +800,8 @@ services:
 
   celery-worker-settlement:
     build:
-      context: ./services/settlement-service
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: services/settlement-service/Dockerfile
     <<: *service-defaults
     command:
       - celery
@@ -820,8 +822,8 @@ services:
 
   celery-worker-notification:
     build:
-      context: ./services/notification-service
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: services/notification-service/Dockerfile
     <<: *service-defaults
     command:
       - celery
@@ -840,8 +842,8 @@ services:
 
   celery-beat:
     build:
-      context: ./services/settlement-service
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: services/settlement-service/Dockerfile
     <<: *service-defaults
     command:
       - celery

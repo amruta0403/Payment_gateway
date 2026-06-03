@@ -1,0 +1,130 @@
+name: Deploy — Oracle Cloud ARM A1
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: "Target environment"
+        required: true
+        default: production
+        type: choice
+        options: [production, staging]
+      services:
+        description: "Services to deploy (comma-separated, or 'all')"
+        required: false
+        default: "all"
+  push:
+    branches: [main]
+    paths:
+      - "services/**"
+      - "shared/**"
+      - "docker-compose.yml"
+      - ".env.example"
+
+concurrency:
+  group: deploy-${{ github.ref }}
+  cancel-in-progress: false   # never cancel a running deployment
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_PREFIX: ${{ github.repository_owner }}/payment-gateway
+
+jobs:
+  deploy:
+    name: Deploy to OCI (${{ inputs.environment || 'production' }})
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment || 'production' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Determine image SHA
+        id: sha
+        run: echo "short=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
+
+      - name: Configure SSH
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.OCI_SSH_KEY }}
+
+      - name: Add host to known_hosts
+        run: |
+          mkdir -p ~/.ssh
+          ssh-keyscan -H ${{ secrets.OCI_HOST }} >> ~/.ssh/known_hosts
+
+      - name: Pull latest images on OCI instance
+        env:
+          OCI_HOST: ${{ secrets.OCI_HOST }}
+          OCI_USER: ${{ secrets.OCI_USER }}
+          SHORT_SHA: ${{ steps.sha.outputs.short }}
+        run: |
+          ssh $OCI_USER@$OCI_HOST << 'REMOTE'
+            set -euo pipefail
+            cd ~/payment-gateway
+
+            # Login to GitHub Container Registry
+            echo "${{ secrets.GITHUB_TOKEN }}" | \
+              docker login ghcr.io -u ${{ github.actor }} --password-stdin
+
+            # Pull all service images
+            docker compose pull
+
+            # Zero-downtime rolling update
+            services="${{ inputs.services || 'all' }}"
+            if [ "$services" = "all" ]; then
+              docker compose up -d --no-deps
+            else
+              IFS=',' read -ra svcs <<< "$services"
+              for svc in "${svcs[@]}"; do
+                echo "==> Updating $svc..."
+                docker compose up -d --no-deps "$svc"
+                sleep 5
+              done
+            fi
+
+            # Health check
+            sleep 10
+            docker compose ps | grep -E "(Up|healthy)"
+          REMOTE
+
+      - name: Run migrations
+        env:
+          OCI_HOST: ${{ secrets.OCI_HOST }}
+          OCI_USER: ${{ secrets.OCI_USER }}
+        run: |
+          ssh $OCI_USER@$OCI_HOST << 'REMOTE'
+            set -euo pipefail
+            cd ~/payment-gateway
+            for svc in merchant-service payment-service upi-service settlement-service \
+                       refund-service notification-service fraud-service audit-service \
+                       webhook-service kyc-service netbanking-service; do
+              echo "==> Migrating $svc..."
+              docker compose exec -T $svc alembic -c migrations/alembic.ini upgrade head \
+                && echo "    ✓ $svc" \
+                || echo "    ! $svc migration failed (may be a new service)"
+            done
+          REMOTE
+
+      - name: Verify deployment
+        env:
+          OCI_HOST: ${{ secrets.OCI_HOST }}
+          OCI_USER: ${{ secrets.OCI_USER }}
+        run: |
+          ssh $OCI_USER@$OCI_HOST << 'REMOTE'
+            cd ~/payment-gateway
+            docker compose ps
+            echo ""
+            echo "Health checks:"
+            for port in 8010 8012 8013 8014 8015 8016 8017 8018 8019 8020 8021 8022; do
+              status=$(curl -sf http://localhost:$port/health 2>/dev/null | jq -r '.status' 2>/dev/null || echo "unreachable")
+              printf "  :%-5d %s\n" $port "$status"
+            done
+          REMOTE
+
+      - name: Post deployment summary
+        if: success()
+        run: |
+          echo "## Deployment successful ✅" >> $GITHUB_STEP_SUMMARY
+          echo "- **Environment**: ${{ inputs.environment || 'production' }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Commit**: \`${{ github.sha }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "- **Deployed by**: ${{ github.actor }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Time**: $(date -u +%Y-%m-%dT%H:%M:%SZ)" >> $GITHUB_STEP_SUMMARY

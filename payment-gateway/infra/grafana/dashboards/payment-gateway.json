@@ -1,0 +1,85 @@
+{
+  "uid": "payment-gateway-overview",
+  "title": "Payment Gateway — Overview",
+  "tags": ["payment", "overview"],
+  "refresh": "30s",
+  "time": {"from": "now-1h", "to": "now"},
+  "schemaVersion": 38,
+  "panels": [
+    {
+      "id": 1, "type": "stat", "title": "Payment Success Rate (1h)",
+      "gridPos": {"h": 4, "w": 6, "x": 0, "y": 0},
+      "options": {"reduceOptions": {"calcs": ["lastNotNull"]}, "colorMode": "background"},
+      "fieldConfig": {"defaults": {"unit": "percentunit", "thresholds": {"steps": [
+        {"value": null, "color": "red"}, {"value": 0.9, "color": "yellow"}, {"value": 0.98, "color": "green"}
+      ]}}},
+      "targets": [{"datasource": "Prometheus", "expr": "sum(rate(http_requests_total{handler=~\"/v1/payments.*\", status=~\"2..\"}[1h])) / sum(rate(http_requests_total{handler=~\"/v1/payments.*\"}[1h]))", "legendFormat": "Success Rate"}]
+    },
+    {
+      "id": 2, "type": "stat", "title": "Total Transactions (24h)",
+      "gridPos": {"h": 4, "w": 6, "x": 6, "y": 0},
+      "options": {"reduceOptions": {"calcs": ["sum"]}},
+      "fieldConfig": {"defaults": {"unit": "short"}},
+      "targets": [{"datasource": "Prometheus", "expr": "increase(http_requests_total{handler=~\"/v1/payments\", method=\"POST\", status=~\"2..\"}[24h])", "legendFormat": "Transactions"}]
+    },
+    {
+      "id": 3, "type": "stat", "title": "Fraud Block Rate (1h)",
+      "gridPos": {"h": 4, "w": 6, "x": 12, "y": 0},
+      "options": {"reduceOptions": {"calcs": ["lastNotNull"]}, "colorMode": "background"},
+      "fieldConfig": {"defaults": {"unit": "percentunit", "thresholds": {"steps": [
+        {"value": null, "color": "green"}, {"value": 0.05, "color": "yellow"}, {"value": 0.1, "color": "red"}
+      ]}}},
+      "targets": [{"datasource": "Prometheus", "expr": "sum(rate(fraud_decisions_total{decision=\"BLOCK\"}[1h])) / sum(rate(fraud_decisions_total[1h]))", "legendFormat": "Block Rate"}]
+    },
+    {
+      "id": 4, "type": "stat", "title": "Fraud Score p95 Latency",
+      "gridPos": {"h": 4, "w": 6, "x": 18, "y": 0},
+      "options": {"reduceOptions": {"calcs": ["lastNotNull"]}, "colorMode": "background"},
+      "fieldConfig": {"defaults": {"unit": "s", "thresholds": {"steps": [
+        {"value": null, "color": "green"}, {"value": 0.08, "color": "yellow"}, {"value": 0.1, "color": "red"}
+      ]}}},
+      "targets": [{"datasource": "Prometheus", "expr": "histogram_quantile(0.95, sum(rate(fraud_scoring_duration_seconds_bucket[5m])) by (le))", "legendFormat": "p95"}]
+    },
+    {
+      "id": 5, "type": "timeseries", "title": "Payment Request Rate by Method",
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 4},
+      "fieldConfig": {"defaults": {"unit": "reqps"}},
+      "targets": [
+        {"datasource": "Prometheus", "expr": "sum(rate(http_requests_total{handler=~\"/v1/payments.*\", status=~\"2..\"}[5m])) by (handler)", "legendFormat": "{{handler}}"}
+      ]
+    },
+    {
+      "id": 6, "type": "timeseries", "title": "p95 Latency — Payment Service",
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 4},
+      "fieldConfig": {"defaults": {"unit": "s"}},
+      "targets": [
+        {"datasource": "Prometheus", "expr": "histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket{handler=~\"/v1/payments.*\"}[5m])) by (le, handler))", "legendFormat": "p95 {{handler}}"},
+        {"datasource": "Prometheus", "expr": "histogram_quantile(0.50, sum(rate(http_request_duration_seconds_bucket{handler=~\"/v1/payments.*\"}[5m])) by (le, handler))", "legendFormat": "p50 {{handler}}"}
+      ]
+    },
+    {
+      "id": 7, "type": "timeseries", "title": "Fraud Decisions per Minute",
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 12},
+      "fieldConfig": {"defaults": {"unit": "short"}},
+      "targets": [
+        {"datasource": "Prometheus", "expr": "sum(rate(fraud_decisions_total[1m])) by (decision) * 60", "legendFormat": "{{decision}}"}
+      ]
+    },
+    {
+      "id": 8, "type": "timeseries", "title": "Top Fraud Rules Fired (1h)",
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 12},
+      "fieldConfig": {"defaults": {"unit": "short"}},
+      "targets": [
+        {"datasource": "Prometheus", "expr": "topk(5, increase(fraud_rule_hits_total[1h]))", "legendFormat": "{{rule_name}}"}
+      ]
+    },
+    {
+      "id": 9, "type": "timeseries", "title": "HTTP Error Rate by Service (4xx + 5xx)",
+      "gridPos": {"h": 8, "w": 24, "x": 0, "y": 20},
+      "fieldConfig": {"defaults": {"unit": "reqps"}},
+      "targets": [
+        {"datasource": "Prometheus", "expr": "sum(rate(http_requests_total{status=~\"[45]..\"}[5m])) by (job)", "legendFormat": "{{job}}"}
+      ]
+    }
+  ]
+}

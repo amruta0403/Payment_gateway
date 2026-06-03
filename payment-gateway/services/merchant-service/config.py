@@ -42,3 +42,6 @@ class Settings(BaseSettings):
     AWS_ACCESS_KEY_ID: str = ""
     AWS_SECRET_ACCESS_KEY: str = ""
     S3_ENDPOINT_URL: str = ""   # set for Cloudflare R2 or custom S3
+    # ── Error tracking ────────────────────────────────────────────────────
+    GLITCHTIP_DSN: str = ""  # GlitchTip/Sentry DSN — set in .env
+    SERVICE_VERSION: str = "0.1.0"

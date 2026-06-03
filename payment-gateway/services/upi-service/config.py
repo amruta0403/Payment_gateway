@@ -41,3 +41,6 @@ class Settings(BaseSettings):
     NPCI_CALLBACK_SECRET: str = "change-me"  # HMAC key for callback validation
     GATEWAY_VPA: str = "merchant@hdfc"       # Default payee VPA
     UPI_COLLECT_EXPIRY_SECONDS: int = 300
+    # ── Error tracking ────────────────────────────────────────────────────
+    GLITCHTIP_DSN: str = ""  # GlitchTip/Sentry DSN — set in .env
+    SERVICE_VERSION: str = "0.1.0"

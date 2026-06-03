@@ -10,7 +10,7 @@
         test test-cov test-all seed setup-keycloak init \
         infra-up infra-down topics topic-tail \
         celery-status run-settlement scale-settlement scale-notification \
-        rbi-report help
+        rbi-report load-test test-rate-limits help
 
 COMPOSE      := docker compose
 COMPOSE_PROD := docker compose -f docker-compose.yml
@@ -241,6 +241,28 @@ scale-notification:
 	$(COMPOSE) up -d --scale celery-worker-notification=$(n) celery-worker-notification
 
 # ─── Reports ──────────────────────────────────────────────────────────────────
+
+## Run Locust load test against fraud-service (p95 < 100ms SLO)
+## Usage: make load-test [users=50] [duration=60s]
+load-test:
+	@bash tests/load/run_load_test.sh ${users:-50} ${spawn:-10} ${duration:-60s}
+
+## Run fraud-service UI load test (interactive Locust web UI at :8089)
+load-test-ui:
+	FRAUD_SERVICE_URL=http://localhost:8013 \
+	locust -f tests/load/locustfile.py --host http://localhost:8013 --web-port 8089
+
+## Integration rate-limit tests (requires RATE_LIMIT_TEST_URL env var)
+test-rate-limits:
+	@echo "==> Running Traefik rate-limit integration tests..."
+	pytest tests/integration/test_rate_limiting.py -v -s \
+	  --tb=short -x \
+	  -k "rate" || echo "Set RATE_LIMIT_TEST_URL to run against a live stack"
+
+## First-time Keycloak realm + client + roles + test users
+setup-keycloak:
+	@echo "==> Setting up Keycloak realm..."
+	@bash scripts/setup_keycloak.sh
 
 ## Download RBI CSV: make rbi-report start=2025-01-01 end=2025-01-31
 rbi-report:

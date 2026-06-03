@@ -34,6 +34,10 @@ structlog.configure(
 )
 log = structlog.get_logger()
 
+# Error tracking (GlitchTip / Sentry) — no-op if GLITCHTIP_DSN not set
+from shared.telemetry import init_error_tracking
+init_error_tracking(settings)
+
 
 class RequestIDMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):

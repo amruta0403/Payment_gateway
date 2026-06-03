@@ -1,1 +1,3 @@
-﻿__all__ = []  # routers registered here
+from routers.transaction import router as transaction_router
+
+__all__ = [transaction_router]

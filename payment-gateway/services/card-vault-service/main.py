@@ -31,6 +31,10 @@ structlog.configure(
 )
 log = structlog.get_logger()
 
+# Error tracking (GlitchTip / Sentry) — no-op if GLITCHTIP_DSN not set
+from shared.telemetry import init_error_tracking
+init_error_tracking(settings)
+
 # ── Security middleware ───────────────────────────────────────────────────────
 
 _CDE_SUBNET = ipaddress.ip_network(settings.CDE_NETWORK_SUBNET, strict=False)

@@ -35,3 +35,6 @@ class Settings(BaseSettings):
 
     CELERY_BROKER_URL: str = "redis://redis:6379/1"
     CELERY_RESULT_BACKEND: str = "redis://redis:6379/2"
+    # ── Error tracking ────────────────────────────────────────────────────
+    GLITCHTIP_DSN: str = ""  # GlitchTip/Sentry DSN — set in .env
+    SERVICE_VERSION: str = "0.1.0"

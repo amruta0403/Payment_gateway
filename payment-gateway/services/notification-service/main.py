@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 import asyncio
 import re
@@ -31,6 +31,10 @@ structlog.configure(
     wrapper_class=structlog.make_filtering_bound_logger(settings.LOG_LEVEL),
 )
 log = structlog.get_logger()
+
+# Error tracking (GlitchTip / Sentry) — no-op if GLITCHTIP_DSN not set
+from shared.telemetry import init_error_tracking
+init_error_tracking(settings)
 
 
 class RequestIDMiddleware(BaseHTTPMiddleware):

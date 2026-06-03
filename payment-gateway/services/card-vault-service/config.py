@@ -39,3 +39,6 @@ class Settings(BaseSettings):
     # Infisical
     INFISICAL_TOKEN: str = ""
     INFISICAL_SITE_URL: str = "http://infisical:8080"
+    # ── Error tracking ────────────────────────────────────────────────────
+    GLITCHTIP_DSN: str = ""  # GlitchTip/Sentry DSN — set in .env
+    SERVICE_VERSION: str = "0.1.0"

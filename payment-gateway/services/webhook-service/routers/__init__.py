@@ -1,1 +1,3 @@
-﻿__all__ = []  # routers registered here
+from routers.webhook import router as webhook_router
+
+__all__ = [webhook_router]

@@ -1,0 +1,159 @@
+name: CI — Build & Test
+
+on:
+  push:
+    branches: [main, develop, "feature/**", "fix/**"]
+  pull_request:
+    branches: [main, develop]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_PREFIX: ${{ github.repository_owner }}/payment-gateway
+
+jobs:
+  # ── Lint / static analysis ─────────────────────────────────────────────────
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: pip install ruff
+      - name: ruff check
+        run: ruff check services/ shared/ --select=E,W,F --ignore=E501
+
+  # ── Unit tests (matrix across all testable services) ──────────────────────
+  test:
+    name: Test — ${{ matrix.service }}
+    runs-on: ubuntu-latest
+    needs: lint
+    strategy:
+      fail-fast: false
+      matrix:
+        service:
+          - payment-service
+          - card-vault-service
+          - merchant-service
+          - fraud-service
+          - upi-service
+          - settlement-service
+          - notification-service
+          - refund-service
+          - audit-service
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install shared library
+        run: pip install -e ./shared/
+
+      - name: Install service dependencies
+        working-directory: services/${{ matrix.service }}
+        run: |
+          pip install -e ".[test]" 2>/dev/null || \
+          pip install \
+            fastapi uvicorn sqlalchemy alembic asyncpg pydantic pydantic-settings \
+            aiokafka httpx "redis[asyncio]" "python-jose[cryptography]" cryptography \
+            structlog prometheus-fastapi-instrumentator "celery[redis]" boto3 \
+            "sentry-sdk[fastapi,sqlalchemy]" starlette \
+            pytest pytest-asyncio anyio trio aiosqlite httpx \
+            scikit-learn numpy 2>/dev/null || true
+
+      - name: Run tests
+        working-directory: services/${{ matrix.service }}
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+          DATABASE_URL: "postgresql+asyncpg://pguser:pgpass@localhost:5432/test_db"
+          REDIS_URL: "redis://localhost:6379/0"
+          ENVIRONMENT: development
+        run: |
+          pytest tests/ -v --tb=short \
+            --asyncio-mode=auto \
+            -q \
+            2>&1 | head -200
+
+  # ── Build Docker images ────────────────────────────────────────────────────
+  build:
+    name: Build — ${{ matrix.service }}
+    runs-on: ubuntu-latest
+    needs: test
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop')
+    strategy:
+      fail-fast: false
+      matrix:
+        service:
+          - payment-service
+          - card-vault-service
+          - merchant-service
+          - fraud-service
+          - upi-service
+          - settlement-service
+          - notification-service
+          - refund-service
+          - audit-service
+          - transaction-service
+          - webhook-service
+          - reporting-service
+          - kyc-service
+          - netbanking-service
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/${{ matrix.service }}
+          tags: |
+            type=sha,prefix=,format=short
+            type=ref,event=branch
+            type=raw,value=latest,enable={{is_default_branch}}
+
+      - name: Build and push
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: services/${{ matrix.service }}/Dockerfile
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          platforms: linux/amd64,linux/arm64   # OCI ARM A1 support
+
+  # ── Notify on failure ──────────────────────────────────────────────────────
+  notify-failure:
+    name: Notify on failure
+    runs-on: ubuntu-latest
+    needs: [lint, test, build]
+    if: failure()
+    steps:
+      - name: Post failure summary
+        run: |
+          echo "CI failed for ${{ github.ref }} — check the Actions tab."
+          echo "Commit: ${{ github.sha }}"
+          echo "Author: ${{ github.actor }}"

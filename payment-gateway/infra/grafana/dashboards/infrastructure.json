@@ -1,0 +1,87 @@
+{
+  "uid": "infrastructure",
+  "title": "Infrastructure — PostgreSQL / Redis / Traefik",
+  "tags": ["infra", "postgres", "redis", "traefik"],
+  "refresh": "30s",
+  "time": {"from": "now-1h", "to": "now"},
+  "schemaVersion": 38,
+  "panels": [
+    {
+      "id": 1, "type": "stat", "title": "PostgreSQL Up",
+      "gridPos": {"h": 3, "w": 4, "x": 0, "y": 0},
+      "options": {"colorMode": "background"},
+      "fieldConfig": {"defaults": {"mappings": [{"options": {"0": {"text": "DOWN", "color": "red"}, "1": {"text": "UP", "color": "green"}}, "type": "value"}]}},
+      "targets": [{"datasource": "Prometheus", "expr": "pg_up", "legendFormat": "PG"}]
+    },
+    {
+      "id": 2, "type": "stat", "title": "Redis Up",
+      "gridPos": {"h": 3, "w": 4, "x": 4, "y": 0},
+      "options": {"colorMode": "background"},
+      "fieldConfig": {"defaults": {"mappings": [{"options": {"0": {"text": "DOWN", "color": "red"}, "1": {"text": "UP", "color": "green"}}, "type": "value"}]}},
+      "targets": [{"datasource": "Prometheus", "expr": "redis_up", "legendFormat": "Redis"}]
+    },
+    {
+      "id": 3, "type": "stat", "title": "PG Active Connections",
+      "gridPos": {"h": 3, "w": 4, "x": 8, "y": 0},
+      "fieldConfig": {"defaults": {"unit": "short", "thresholds": {"steps": [{"value": null, "color": "green"}, {"value": 80, "color": "yellow"}, {"value": 90, "color": "red"}]}}},
+      "targets": [{"datasource": "Prometheus", "expr": "sum(pg_stat_database_numbackends{datname=~\"payment_db|payment.*\"})", "legendFormat": "connections"}]
+    },
+    {
+      "id": 4, "type": "stat", "title": "Redis Memory Used",
+      "gridPos": {"h": 3, "w": 4, "x": 12, "y": 0},
+      "fieldConfig": {"defaults": {"unit": "bytes"}},
+      "targets": [{"datasource": "Prometheus", "expr": "redis_memory_used_bytes", "legendFormat": "memory"}]
+    },
+    {
+      "id": 5, "type": "stat", "title": "Redis Connected Clients",
+      "gridPos": {"h": 3, "w": 4, "x": 16, "y": 0},
+      "fieldConfig": {"defaults": {"unit": "short"}},
+      "targets": [{"datasource": "Prometheus", "expr": "redis_connected_clients", "legendFormat": "clients"}]
+    },
+    {
+      "id": 6, "type": "stat", "title": "Traefik Requests/s",
+      "gridPos": {"h": 3, "w": 4, "x": 20, "y": 0},
+      "fieldConfig": {"defaults": {"unit": "reqps"}},
+      "targets": [{"datasource": "Prometheus", "expr": "sum(rate(traefik_entrypoint_requests_total[5m]))", "legendFormat": "req/s"}]
+    },
+    {
+      "id": 7, "type": "timeseries", "title": "PostgreSQL Transaction Rate",
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 3},
+      "fieldConfig": {"defaults": {"unit": "short"}},
+      "targets": [
+        {"datasource": "Prometheus", "expr": "sum(rate(pg_stat_database_xact_commit{datname=\"payment_db\"}[5m]))", "legendFormat": "commits/s"},
+        {"datasource": "Prometheus", "expr": "sum(rate(pg_stat_database_xact_rollback{datname=\"payment_db\"}[5m]))", "legendFormat": "rollbacks/s"}
+      ]
+    },
+    {
+      "id": 8, "type": "timeseries", "title": "PostgreSQL Cache Hit Ratio",
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 3},
+      "fieldConfig": {"defaults": {"unit": "percentunit", "min": 0, "max": 1}},
+      "targets": [{"datasource": "Prometheus", "expr": "sum(rate(pg_stat_database_blks_hit{datname=\"payment_db\"}[5m])) / (sum(rate(pg_stat_database_blks_hit{datname=\"payment_db\"}[5m])) + sum(rate(pg_stat_database_blks_read{datname=\"payment_db\"}[5m])))", "legendFormat": "cache hit ratio"}]
+    },
+    {
+      "id": 9, "type": "timeseries", "title": "Redis Commands/s",
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 11},
+      "fieldConfig": {"defaults": {"unit": "short"}},
+      "targets": [{"datasource": "Prometheus", "expr": "rate(redis_commands_processed_total[5m])", "legendFormat": "commands/s"}]
+    },
+    {
+      "id": 10, "type": "timeseries", "title": "Redis Cache Hit Rate",
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 11},
+      "fieldConfig": {"defaults": {"unit": "percentunit"}},
+      "targets": [{"datasource": "Prometheus", "expr": "rate(redis_keyspace_hits_total[5m]) / (rate(redis_keyspace_hits_total[5m]) + rate(redis_keyspace_misses_total[5m]))", "legendFormat": "hit rate"}]
+    },
+    {
+      "id": 11, "type": "timeseries", "title": "Traefik Request Rate by Entrypoint",
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 19},
+      "fieldConfig": {"defaults": {"unit": "reqps"}},
+      "targets": [{"datasource": "Prometheus", "expr": "sum(rate(traefik_entrypoint_requests_total[5m])) by (entrypoint)", "legendFormat": "{{entrypoint}}"}]
+    },
+    {
+      "id": 12, "type": "timeseries", "title": "Traefik p95 Latency",
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 19},
+      "fieldConfig": {"defaults": {"unit": "s"}},
+      "targets": [{"datasource": "Prometheus", "expr": "histogram_quantile(0.95, sum(rate(traefik_entrypoint_request_duration_seconds_bucket[5m])) by (le, entrypoint))", "legendFormat": "p95 {{entrypoint}}"}]
+    }
+  ]
+}

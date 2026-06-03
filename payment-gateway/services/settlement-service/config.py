@@ -42,3 +42,6 @@ class Settings(BaseSettings):
     RAZORPAY_KEY_SECRET: str = ""
     RAZORPAY_X_ACCOUNT: str = ""         # Razorpay X source account number
     SETTLEMENT_CUTOFF_HOUR_UTC: int = 17  # 17:30 UTC = 23:00 IST
+    # ── Error tracking ────────────────────────────────────────────────────
+    GLITCHTIP_DSN: str = ""  # GlitchTip/Sentry DSN — set in .env
+    SERVICE_VERSION: str = "0.1.0"

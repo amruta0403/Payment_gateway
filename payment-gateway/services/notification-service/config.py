@@ -48,3 +48,6 @@ class Settings(BaseSettings):
     # ── SMS providers ──────────────────────────────────────────────────────
     FAST2SMS_API_KEY: str = ""
     SMS_SENDER_ID: str = "PAYGTW"
+    # ── Error tracking ────────────────────────────────────────────────────
+    GLITCHTIP_DSN: str = ""  # GlitchTip/Sentry DSN — set in .env
+    SERVICE_VERSION: str = "0.1.0"
