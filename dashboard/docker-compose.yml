@@ -1,0 +1,63 @@
+version: "3.9"
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Dashboard — runs standalone alongside payment-gateway/
+#
+# Repo layout:
+#   d:\DJ\payment-gateway\   ← run `make up` here first
+#   d:\DJ\dashboard\         ← this file
+#
+# The BFF container talks to payment-gateway services.
+# By default it uses host.docker.internal to reach services on the host
+# (works on Mac/Windows; on Linux add --add-host flag below).
+#
+# To connect both compose stacks via the payment_network bridge instead,
+# see the "Using shared Docker network" section in README.md.
+# ─────────────────────────────────────────────────────────────────────────────
+
+x-host-gateway: &host-gateway
+  extra_hosts:
+    - "host.docker.internal:host-gateway"   # Linux support
+
+services:
+  bff:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    ports:
+      - "8099:8099"
+    env_file: ./backend/.env
+    environment:
+      # When running in Docker, reach payment-gateway services via host
+      PAYMENT_SERVICE_URL:     http://host.docker.internal:8010
+      MERCHANT_SERVICE_URL:    http://host.docker.internal:8012
+      SETTLEMENT_SERVICE_URL:  http://host.docker.internal:8015
+      REFUND_SERVICE_URL:      http://host.docker.internal:8016
+      TRANSACTION_SERVICE_URL: http://host.docker.internal:8020
+      WEBHOOK_SERVICE_URL:     http://host.docker.internal:8021
+      FRAUD_SERVICE_URL:       http://host.docker.internal:8013
+      REPORTING_SERVICE_URL:   http://host.docker.internal:8022
+      KEYCLOAK_URL:            http://host.docker.internal:8080
+      ALLOWED_ORIGINS:         http://localhost:3001
+    <<: *host-gateway
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8099/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    ports:
+      - "3001:3001"
+    env_file: ./frontend/.env.local
+    environment:
+      # Frontend calls BFF via internal Docker network
+      NEXT_PUBLIC_BFF_URL: http://bff:8099
+    depends_on:
+      bff:
+        condition: service_healthy
+    restart: unless-stopped

@@ -164,6 +164,12 @@ payment-gateway/
 ├── .env.example                     ← 70+ variables with comments
 ├── requirements-dev.txt             ← locust, httpx, ruff, mypy for host machine
 └── CODEBASE.md                      ← This file
+
+# MERCHANT DASHBOARD — lives at the REPO ROOT, not inside payment-gateway/
+../dashboard/                        ← Sibling directory at d:\DJ\dashboard\
+  ├── frontend/                      ← Next.js 14 + Tailwind (port 3001)
+  └── backend/                       ← FastAPI BFF (port 8099)
+# See ../dashboard/README.md for setup instructions
 ```
 
 ---
